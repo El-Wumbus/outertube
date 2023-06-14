@@ -5,8 +5,7 @@ use tracing::{event, Level};
 
 use crate::{config::CONFIG, error::Error, Client};
 
-mod search;
-
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Endpoint {
     Config,
@@ -106,7 +105,7 @@ impl Endpoint {
     }
 }
 
-fn make_context(client: &Client) -> Value {
+fn make_yt_context(client: &Client) -> Value {
     let client_context = client.client_context;
 
     let mut context = json!({
@@ -122,17 +121,25 @@ fn make_context(client: &Client) -> Value {
     return json!({ "client": context });
 }
 
+pub(crate) async fn search(client: &Client, query: &str, params: Option<&str>) -> Result<Value, Error> {
+    let data = json! ({
+        "query": query,
+        "context": make_yt_context(client),
+        "params": params.unwrap_or(""),
+    });
+
+    Endpoint::Search.post(client, data).await
+}
+
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::client::ClientBuilder;
 
-    // #[tokio::test]
-    // async fn test_post() {
-    //     let client = ClientBuilder::new().build().unwrap();
-    //     // This will fail
-    //     let x = post(&client, Endpoint::Search, serde_json::Value::Null)
-    //         .await
-    //         .unwrap();
-    //     dbg!(x);
-    // }
+    #[tokio::test]
+    async fn test_search() {
+        let client = ClientBuilder::new().build().unwrap();
+        let _x = search(&client, "Linus Tech Tips", None).await.unwrap();
+    }
 }

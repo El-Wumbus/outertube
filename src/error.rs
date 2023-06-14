@@ -15,8 +15,8 @@ pub enum Error {
         request_data:     serde_json::Value,
     },
 
-    #[error("YouTube returned JSON that couldn't be parsed!")]
-    JsonParse,
+    #[error("YouTube returned JSON that couldn't be parsed: {0}")]
+    JsonParse(String),
 }
 
 impl From<reqwest::Error> for Error {

@@ -1,4 +1,4 @@
-mod client;
+pub mod client;
 mod config;
 pub mod error;
 mod api;

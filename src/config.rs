@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 const REFERER_YOUTUBE: &str = "https://www.youtube.com/";
 const REFERER_YOUTUBE_MOBILE: &str = "https://m.youtube.com/";
@@ -6,11 +6,12 @@ const REFERER_YOUTUBE_MUSIC: &str = "https://music.youtube.com/";
 const REFERER_YOUTUBE_KIDS: &str = "https://www.youtubekids.com/";
 const REFERER_YOUTUBE_STUDIO: &str = "https://studio.youtube.com/";
 const REFERER_YOUTUBE_ANALYTICS: &str = "https://analytics.youtube.com/";
-const REFERER_GOOGLE_ASSISTANT: &str = "https://assistant.google.com/";
+// const REFERER_GOOGLE_ASSISTANT: &str = "https://assistant.google.com/";
 
 const USER_AGENT_WEB:& str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.157 Safari/537.36";
-const USER_AGEN_WEB_ALT:&str = "Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101 Firefox/102.0";
+// const USER_AGEN_WEB_ALT:&str = "Mozilla/5.0 (X11; Linux x86_64; rv:102.0)
+// Gecko/20100101 Firefox/102.0";
 const USER_AGENT_ANDROID:& str =
     "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Mobile Safari/537.36";
 const USER_AGENT_IOS:& str =
@@ -127,24 +128,6 @@ pub(crate) struct ClientContext {
     pub(super) referer:    Option<&'static str>,
 }
 
-impl ClientContext {
-    fn headers(&self) -> HashMap<&'static str, String> {
-        let mut headers = HashMap::from([
-            ("X-Goog-Api-Format-Version", "1".to_string()),
-            ("X-YouTube-Client-Name", self.id.to_string()),
-            ("X-YouTube-Client-Version", self.version.to_string()),
-        ]);
-        if let Some(referer) = self.referer {
-            headers.insert("Referer", referer.to_string());
-        }
-        if let Some(user_agent) = self.user_agent {
-            headers.insert("User-Agent", user_agent.to_string());
-        }
-
-        headers
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Locale {
     pub(crate) hl: String,
@@ -180,13 +163,13 @@ impl fmt::Display for Locale {
 
 pub(crate) const CONFIG: Config = Config {
     // base_url:              "https://youtubei.googleapis.com/youtubei/v1/",
-    base_url: "https://www.youtube.com/youtubei/v1/",
+    base_url:              "https://www.youtube.com/youtubei/v1/",
     client_configurations: &[
         ClientContext {
             id:         1,
             name:       "WEB",
             version:    "2.20230607.06.00",
-                    //  "2.20230607.06.00"
+            //  "2.20230607.06.00"
             user_agent: Some(USER_AGENT_WEB),
             referer:    Some(REFERER_YOUTUBE),
             api_key:    Some("AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"),

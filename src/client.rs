@@ -2,8 +2,10 @@ pub use config::ClientVariant;
 use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::{
+    api,
     config::{self, Locale},
     error::Error,
+    search::{SearchResult},
 };
 
 
@@ -42,7 +44,7 @@ impl Default for ClientBuilder {
 pub struct Client {
     http_client:               reqwest::Client,
     pub(crate) client_context: config::ClientContext,
-    pub(crate) locale: Locale,
+    pub(crate) locale:         Locale,
 }
 
 impl Client {
@@ -106,13 +108,15 @@ impl Client {
         Ok(Self {
             client_context,
             http_client,
-            locale
+            locale,
         })
     }
 
     pub fn get_http_client(&self) -> reqwest::Client { self.http_client.clone() }
 
-    pub fn search(&self, query: &str) {}
+    pub async fn search(&self, query: &str) -> Result<Vec<SearchResult>, Error> {
+        SearchResult::from_search_results(api::endpoints::search(self, query, None).await?)
+    }
 }
 
 #[cfg(test)]
@@ -129,4 +133,11 @@ mod tests {
 
     #[test]
     fn test_innertube_creation() { let _client = ClientBuilder::new().build().unwrap(); }
+
+    #[tokio::test]
+    async fn test_search() {
+        let client = ClientBuilder::new().build().unwrap();
+        let videos = client.search("Linus Tech Tips").await.unwrap();
+        assert!(!videos.is_empty());
+    }
 }
