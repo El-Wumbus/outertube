@@ -2,10 +2,9 @@ pub use config::ClientVariant;
 use reqwest::header::{HeaderMap, HeaderValue};
 
 use crate::{
-    api,
     config::{self, Locale},
     error::Error,
-    search::{SearchResult},
+    search::SearchResults,
 };
 
 
@@ -15,16 +14,19 @@ pub struct ClientBuilder {
 }
 
 impl ClientBuilder {
+    #[must_use]
     pub fn new() -> Self { Self::default() }
 
+    #[must_use]
     pub fn variant(mut self, variant: ClientVariant) -> Self {
         self.client_context = variant.into();
         self
     }
 
-    /// Change the locale from the default `en-us`
-    pub fn locale(mut self, locale: Locale) -> Self {
-        self.locale = locale;
+    /// Change the locale from the default `en-US`
+    #[must_use]
+    pub fn locale(mut self, locale: impl Into<Locale>) -> Self {
+        self.locale = locale.into();
         self
     }
 
@@ -51,15 +53,6 @@ impl Client {
     fn new(client_context: config::ClientContext, locale: Locale) -> Result<Self, Error> {
         let mut headers = HeaderMap::new();
         headers.insert("Accept-Encoding", HeaderValue::from_static("gzip, deflate"));
-        // headers.insert(
-        //     "accept",
-        //     HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*
-        // ;q=0.8"), );
-        // headers.insert(
-        //     "accept-charset",
-        //     HeaderValue::from_static("ISO-8859-1,utf-8;q=0.7,*;q=0.7"),
-        // );
-
         headers.insert("Accept", HeaderValue::from_static("*/*"));
         headers.insert(
             "Accept-Language",
@@ -98,24 +91,90 @@ impl Client {
             .deflate(true)
             .build()?;
 
-        //"X-Goog-Api-Format-Version": "1",
-        //"X-YouTube-Client-Name": str(self.client_id),
-        //"X-YouTube-Client-Version": self.client_version,
-        //"User-Agent": self.user_agent,
-        //"Referer": self.referer,
-        //"Accept-Language": self.locale and self.locale.accept_language(),
-
         Ok(Self {
-            client_context,
             http_client,
+            client_context,
             locale,
         })
     }
 
+    #[inline]
+    #[must_use]
     pub fn get_http_client(&self) -> reqwest::Client { self.http_client.clone() }
 
-    pub async fn search(&self, query: &str) -> Result<Vec<SearchResult>, Error> {
-        SearchResult::from_search_results(api::endpoints::search(self, query, None).await?)
+    /// Search YouTube for a query and get videos, shorts, and channels as response.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use outertube::{ClientBuilder, error::Error};
+    /// # tokio_test::block_on(async {
+    /// # let client = ClientBuilder::new().build()?;
+    /// let search_results = client.search("The TaiWAN Show").await?;
+    /// assert!(!search_results.videos.is_empty());
+    /// # Ok::<(), Error>(())
+    /// # });
+    /// ```
+    #[inline]
+    pub async fn search(&self, query: impl AsRef<str>) -> Result<SearchResults, Error> {
+        SearchResults::search(self, query.as_ref(), None).await
+    }
+
+    /// Ok, so look. I think `YouTube` uses protobuf for sending their search parameters
+    /// and I have no way of getting their schema so proper parameters in the library
+    /// cannot work unless I were to go through and take note of every single
+    /// combonation of parameters just for them to change it in a few weeks.
+    ///
+    /// To get the parameters you need for your specific search you can go to YT and
+    /// select the combonation and grab the value of the URL parameter `sp` (e.g.
+    /// `sp=EgQQARgD`). It must remain URL encoded when used as a parameter.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use outertube::{ClientBuilder, error::Error};
+    /// # tokio_test::block_on(async {
+    /// # let client = ClientBuilder::new().build()?;
+    /// // "EgQQARgD": Type = video + Duration = 4-20 minutes
+    /// let search_results = client
+    ///     .search_with_params("Linus Cat Tips", "EgQQARgD")
+    ///     .await?;
+    /// assert_eq!(
+    ///     search_results.shorts.is_empty(),
+    ///     search_results.channels.is_empty()
+    /// );
+    /// assert!(!search_results.videos.is_empty());
+    /// # Ok::<(), Error>(())
+    /// # });
+    /// ```
+    pub async fn search_with_params(
+        &self,
+        query: impl AsRef<str>,
+        params: &str,
+    ) -> Result<SearchResults, Error> {
+        SearchResults::search(self, query.as_ref(), Some(params)).await
+    }
+
+    /// Continue searching. Returns `true` if more results were able to be found.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use outertube::ClientBuilder;
+    /// # tokio_test::block_on(async {
+    /// # let client = ClientBuilder::new().build().unwrap();
+    /// let mut search_results = client.search("Linus Cat Tips").await.unwrap();
+    /// let original_videos = search_results.videos.clone();
+    /// // Do something with the results ...
+    /// if client.continue_search(&mut search_results).await.unwrap() {
+    ///     // There's new results in there!
+    ///     assert_ne!(original_videos, search_results.videos);
+    /// }
+    /// # });
+    /// ```
+    #[inline]
+    pub async fn continue_search(&self, search: &mut SearchResults) -> Result<bool, Error> {
+        search.continue_search(self).await
     }
 }
 
@@ -132,12 +191,35 @@ mod tests {
     }
 
     #[test]
-    fn test_innertube_creation() { let _client = ClientBuilder::new().build().unwrap(); }
+    fn test_client_creation() { let _client = ClientBuilder::new().build().unwrap(); }
 
     #[tokio::test]
     async fn test_search() {
         let client = ClientBuilder::new().build().unwrap();
-        let videos = client.search("Linus Tech Tips").await.unwrap();
-        assert!(!videos.is_empty());
+        let results = client.search("Linus Tech Tips").await.unwrap();
+        assert!(!results.videos.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_search_continue() {
+        let client = ClientBuilder::new().build().unwrap();
+        let mut results = client.search("Linus Tech Tips").await.unwrap();
+        assert!(!results.videos.is_empty());
+        let previous_results = results.videos.clone();
+
+        client.continue_search(&mut results).await.unwrap();
+        assert!(!results.videos.is_empty());
+        assert_ne!(previous_results, results.videos);
+    }
+
+    #[tokio::test]
+    async fn test_search_with_params() {
+        let client = ClientBuilder::new().build().unwrap();
+        let search_results = client
+            .search_with_params("Linus Cat Tips", "EgQQARgD")
+            .await
+            .unwrap();
+        assert!(search_results.shorts.is_empty() && search_results.channels.is_empty());
+        assert!(!search_results.videos.is_empty());
     }
 }

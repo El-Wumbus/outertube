@@ -3,5 +3,5 @@ mod config;
 pub mod error;
 mod api;
 pub use api::*;
-
-pub use client::Client;
+pub(crate) mod util;
+pub use client::ClientBuilder;

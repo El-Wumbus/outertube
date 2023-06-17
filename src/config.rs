@@ -96,11 +96,9 @@ pub enum ClientVariant {
     Tvhtml5ForKids       = 57,
 }
 
-#[cfg(debug_assertions)]
-impl TryFrom<usize> for ClientVariant {
-    type Error = String;
-
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
+impl ClientVariant {
+    #[cfg(test)]
+    pub(crate) fn try_from(value: usize) -> Result<Self, String> {
         if value > ClientVariant::Tvhtml5ForKids as usize {
             return Err(format!("{value} is not a variant of ClientVariant"));
         }
@@ -109,11 +107,11 @@ impl TryFrom<usize> for ClientVariant {
     }
 }
 
-impl Into<ClientContext> for ClientVariant {
-    fn into(self) -> ClientContext {
+impl From<ClientVariant> for ClientContext {
+    fn from(val: ClientVariant) -> Self {
         // Each variant is in order of the slice and serves as an index into it. It shouldn't fail
         // 🙏.
-        CONFIG.client_configurations[self as usize]
+        CONFIG.client_configurations[val as usize]
     }
 }
 

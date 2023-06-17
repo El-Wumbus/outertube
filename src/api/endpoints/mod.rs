@@ -3,7 +3,7 @@ use std::fmt;
 use serde_json::{json, Value};
 use tracing::{event, Level};
 
-use crate::{config::CONFIG, error::Error, Client};
+use crate::{client::Client, config::CONFIG, error::Error};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -40,10 +40,12 @@ impl fmt::Display for Endpoint {
 impl Endpoint {
     async fn post(self, client: &Client, data: Value) -> Result<Value, Error> {
         let endpoint = self.to_string();
-        let url = match client.client_context.api_key {
-            Some(key) => format!("{}{endpoint}?key={key}&prettyPrint=false", CONFIG.base_url),
-            None => format!("{}{endpoint}?prettyPrint=false", CONFIG.base_url),
-        };
+        // let url = match client.client_context.api_key {
+        //     Some(key) => format!("{}{endpoint}?key={key}&prettyPrint=false", CONFIG.base_url),
+        //     None => format!("{}{endpoint}?prettyPrint=false", CONFIG.base_url),
+        // };
+
+        let url = if let Some(key) = client.client_context.api_key { format!("{}{endpoint}?key={key}&prettyPrint=false", CONFIG.base_url) } else { format!("{}{endpoint}?prettyPrint=false", CONFIG.base_url) };
 
         let post_result = client.get_http_client().post(url).json(&data).send().await;
         match post_result {
@@ -70,16 +72,16 @@ impl Endpoint {
                     }
                 }
 
-                return match response.json::<Value>().await {
+                match response.json::<Value>().await {
                     Ok(response_data) => {
-                        if !response_data["error"].is_null() {
+                        if response_data["error"].is_null() {
+                            Ok(response_data) 
+                        } else {
                             Err(Error::YtRequest {
                                 message: response_data["error"]["message"].to_string(),
                                 endpoint,
                                 request_data: data,
                             })
-                        } else {
-                            Ok(response_data)
                         }
                     }
                     Err(e) => {
@@ -90,7 +92,7 @@ impl Endpoint {
                             request_data: data,
                         })
                     }
-                };
+                }
             }
             Err(e) => {
                 tracing::event!(target: "intertube", Level::ERROR, "Request failed: {e:?}");
@@ -118,12 +120,14 @@ fn make_yt_context(client: &Client) -> Value {
         context["gl"] = serde_json::Value::String(gl);
     }
 
-    return json!({ "client": context });
+    json!({ "client": context })
 }
 
+/// Ok, so look. `YouTube` uses protobuf for sending their search parameters and I have no
+/// way of getting their schema so proper parameters in the library cannot work. 
 pub(crate) async fn search(client: &Client, query: &str, params: Option<&str>) -> Result<Value, Error> {
     let data = json! ({
-        "query": query,
+        "query": urlencoding::encode(query),
         "context": make_yt_context(client),
         "params": params.unwrap_or(""),
     });
@@ -131,6 +135,14 @@ pub(crate) async fn search(client: &Client, query: &str, params: Option<&str>) -
     Endpoint::Search.post(client, data).await
 }
 
+pub(crate) async fn search_continuation(client: &Client, continuation: &str) -> Result<Value, Error> {
+    let data = json! ({
+        "context": make_yt_context(client),
+        "continuation": continuation,
+    });
+
+    Endpoint::Search.post(client, data).await
+}
 
 #[cfg(test)]
 mod tests {
